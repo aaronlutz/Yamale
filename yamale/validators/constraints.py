@@ -83,6 +83,36 @@ class Max(Constraint):
         return self.fail % (value, self.max)
 
 
+class StringValue(Constraint):
+    keywords = {'equals': str}
+    fail = '%s is not equal to required value: %s'
+
+    def _is_valid(self, value):
+        return self.equals == value
+
+    def _fail(self, value):
+        return self.fail % (value, self.equals)
+
+
+class StringCase(Constraint):
+    fail = '%s is not uppercase.'
+
+    def __init__(self, value_type, kwargs):
+        self.keywords = {'case': value_type}
+        super(Exactly, self).__init__(value_type, kwargs)
+
+    def _is_valid(self, value):
+        if self.case.lower() == 'lower':
+            return value.islower()
+        elif self.case.lower() == 'upper':
+            return value.isupper()
+        else:
+            raise ValueError('invalid case argument')
+
+    def _fail(self, value):
+        return self.fail % value
+
+
 class LengthMin(Constraint):
     keywords = {'min': int}
     fail = 'Length of %s is less than %s'
@@ -119,6 +149,27 @@ class CharacterExclude(Constraint):
     def _fail(self, value):
         return self.fail % (value, self._failed_char)
 
+
+class SpecificDatatype(Constraint):
+    keywords = {'only': str}
+    fail = '"%s" is not the correct datatype: "%s"'
+
+    def _is_valid(self, value):
+        return self.only == value or self.only + '(' in value
+
+    def _fail(self, value):
+        return self.fail % (value, self.only)
+
+
+class BooleanValue(Constraint):
+    keywords = {'equals': bool}
+    fail = '"%s" is not the correct boolean value: "%s"'
+
+    def _is_valid(self, value):
+        return value == self.equals
+
+    def _fail(self, value):
+        return self.fail % (value, self.equals)
 
 class IpVersion(Constraint):
     keywords = {'version': int}

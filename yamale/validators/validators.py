@@ -14,7 +14,7 @@ except ImportError:
 class String(Validator):
     """String validator"""
     tag = 'str'
-    constraints = [con.LengthMin, con.LengthMax, con.CharacterExclude]
+    constraints = [con.LengthMin, con.LengthMax, con.CharacterExclude, con.StringValue]
 
     def _is_valid(self, value):
         return util.isstr(value)
@@ -43,6 +43,7 @@ class Integer(Validator):
 class Boolean(Validator):
     """Boolean validator"""
     tag = 'bool'
+    constraints = [con.BooleanValue]
 
     def _is_valid(self, value):
         return isinstance(value, bool)
@@ -93,6 +94,63 @@ class Map(Validator):
 
     def _is_valid(self, value):
         return isinstance(value, Mapping)
+
+
+class RedshiftDatatype(Validator):
+    tag = 'redshift_datatype'
+    constraints = [con.SpecificDatatype]
+
+    single_arg_pattern = "^[a-zA-Z\s]+\((\d+|MAX)\)"
+    multiple_arg_pattern = "^[a-zA-Z\s]+\((\d+[,]{1}[ ]?\d+|MAX)\)"
+
+    aliases = {'CHAR': 'CHAR', 'CHARACTER': 'CHAR', 'BPCHAR': 'CHAR', 'NCHAR': 'CHAR', 'VARCHAR': 'VARCHAR',
+               'CHARACTER VARYING': 'VARCHAR', 'NVARCHAR': 'VARCHAR'}
+    str_ranges = {'CHAR': (1, 4096), 'VARCHAR': (1, 65535)}
+    num_ranges = {'PRECISION': (1, 38), 'SCALE': (0, 37)}
+
+    one_optional_arg = ['CHAR', 'CHARACTER', 'NCHAR', 'BPCHAR', 'VARCHAR', 'CHARACTER VARYING', 'NVARCHAR']
+    two_optional_args = ['DECIMAL', 'NUMERIC']
+    no_optional_args = ['SMALLINT', 'INT2', 'INTEGER', 'INT', 'INT4', 'BIGINT', 'INT8', 'REAL', 'FLOAT4', 'DATE',
+                        'DOUBLE PRECISION', 'FLOAT8', 'FLOAT', 'BOOLEAN', 'BOOL', 'TIMESTAMP', 'TIMESTAMPTZ',
+                        'TIMESTAMP WITHOUT TIME ZONE', 'TIMESTAMP WITH TIME ZONE', 'GEOMETRY', 'TEXT']
+
+    all_args = one_optional_arg + two_optional_args + no_optional_args
+
+    def __init__(self, *args, **kwargs):
+        super(RedshiftDatatype, self).__init__(*args, **kwargs)
+        self.validators = [val for val in args if isinstance(val, Validator)]
+
+    def _is_valid(self, value):
+
+        def valid_without_argument():
+            return value.upper() in self.all_args
+
+        def valid_single_argument():
+            valid = False
+            if re.findall(self.single_arg_pattern, value):
+                type_ = value.split('(')[0]
+                arg_ = re.search(r'\((.*?)\)', value).group(1).replace(" ", "")
+
+                if type_ in self.one_optional_arg:
+                    valid_range = self.str_ranges[self.aliases[type_]]
+                    valid = arg_ == 'MAX' or valid_range[0] <= int(arg_) <= valid_range[1]
+
+            return valid
+
+        def valid_double_argument():
+            if re.findall(self.multiple_arg_pattern, value):
+                type_ = value.split('(')[0]
+                if type_ in self.two_optional_args:
+                    args_ = [int(x) for x in re.search(r'\((.*?)\)', value).group(1).replace(" ", "").split(",")]
+                    valid_precision = self.num_ranges['PRECISION'][0] <= args_[0] <= self.num_ranges['PRECISION'][1]
+                    valid_scale = self.num_ranges['SCALE'][0] <= args_[1] <= self.num_ranges['SCALE'][1]
+                    if valid_precision and valid_scale and args_[0] > args_[1]:
+                        return True
+
+        if not isinstance(value, str):
+            return False
+
+        return any([valid_without_argument(), valid_single_argument(), valid_double_argument()])
 
 
 class List(Validator):
